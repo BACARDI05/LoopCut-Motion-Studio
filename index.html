@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LoopCut Motion Studio</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,1..1000&display=swap" rel="stylesheet">
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Browser-only motion editor</p>
+        <h1>LoopCut Motion Studio</h1>
+        <p class="subtitle">Cut any part of an image, animate it, export it.</p>
+      </div>
+      <div class="hero-side">
+        <button id="themeToggle" class="theme-toggle" type="button" aria-pressed="false">Dark Mode</button>
+        <div class="counter" aria-live="polite">
+          <span>Successful Videos Exported</span>
+          <strong id="exportCount">0</strong>
+        </div>
+      </div>
+    </header>
+
+    <section class="notice">
+      Everything runs locally in your browser. Your images are not uploaded anywhere.
+    </section>
+
+    <section class="studio-grid">
+      <section class="card upload-card">
+        <div class="card-head">
+          <h2>Upload Image</h2>
+          <span>JPG, PNG, WEBP</span>
+        </div>
+        <label class="drop-zone" for="imageInput" id="dropZone">
+          <input id="imageInput" type="file" accept="image/jpeg,image/jpg,image/png,image/webp">
+          <span class="drop-icon">+</span>
+          <strong>Choose or drop image</strong>
+          <small>Files stay on this device</small>
+        </label>
+        <div class="message" id="message" role="status" aria-live="polite">Upload an image to begin.</div>
+      </section>
+
+      <section class="card preview-card">
+        <div class="card-head">
+          <h2>Canvas Preview</h2>
+          <span id="canvasMeta">Ready</span>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="stage" width="960" height="640" aria-label="Image animation preview"></canvas>
+        </div>
+        <div class="preview-actions">
+          <button id="playPauseBtn" class="primary" type="button">Play</button>
+          <button id="createLayerBtn" type="button">Create Cut Layer</button>
+          <button id="resetAnimBtn" type="button">Reset Animation</button>
+          <button id="resetLayerBtn" type="button">Reset Cut Layer</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Cut Tool Controls</h2>
+          <span>Drag on canvas</span>
+        </div>
+        <div class="control-stack">
+          <label>
+            <span>Cut Shape</span>
+            <select id="shapeSelect">
+              <option value="rect">Rectangle</option>
+              <option value="circle">Circle</option>
+              <option value="heart">Heart</option>
+            </select>
+          </label>
+          <div class="split">
+            <label>
+              <span>Width</span>
+              <input id="cutWidth" type="range" min="30" max="500" value="180">
+            </label>
+            <label>
+              <span>Height</span>
+              <input id="cutHeight" type="range" min="30" max="500" value="150">
+            </label>
+          </div>
+          <div class="split values">
+            <output id="cutWidthValue">180px</output>
+            <output id="cutHeightValue">150px</output>
+          </div>
+          <p class="hint">Drag inside the shape to move it. Drag the square handle to resize it.</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Motion Controls</h2>
+          <span>Live preview</span>
+        </div>
+        <div class="control-stack">
+          <label>
+            <span>Motion Effect</span>
+            <select id="motionEffect">
+              <option value="ltr">Move Left to Right Loop</option>
+              <option value="rtl">Move Right to Left Loop</option>
+              <option value="ttb">Move Top to Bottom Loop</option>
+              <option value="btt">Move Bottom to Top Loop</option>
+              <option value="diagonal">Diagonal Bounce</option>
+              <option value="hbounce">Horizontal Bounce Inside Frame</option>
+              <option value="vbounce">Vertical Bounce Inside Frame</option>
+              <option value="orbit">Orbit Small Circle</option>
+              <option value="shake">Shake/Vibration</option>
+              <option value="manual">Custom Manual Keyframe Basic</option>
+            </select>
+          </label>
+          <label>
+            <span>Direction</span>
+            <select id="direction">
+              <option value="normal">Normal</option>
+              <option value="reverse">Reverse</option>
+            </select>
+          </label>
+          <label>
+            <span>Speed <output id="speedValue">1.0x</output></span>
+            <input id="speed" type="range" min="0.2" max="4" step="0.1" value="1">
+          </label>
+          <label>
+            <span>Rotation <output id="rotationValue">0deg</output></span>
+            <input id="rotation" type="range" min="-180" max="180" step="1" value="0">
+          </label>
+          <label>
+            <span>Scale <output id="scaleValue">1.00x</output></span>
+            <input id="scale" type="range" min="0.25" max="2.5" step="0.05" value="1">
+          </label>
+          <label>
+            <span>Opacity <output id="opacityValue">100%</output></span>
+            <input id="opacity" type="range" min="0" max="1" step="0.01" value="1">
+          </label>
+        </div>
+      </section>
+
+      <section class="card export-card">
+        <div class="card-head">
+          <h2>Export Controls</h2>
+          <span>WebM video</span>
+        </div>
+        <div class="export-row">
+          <label>
+            <span>Format</span>
+            <select id="exportFormat">
+              <option value="webm" selected>WebM</option>
+              <option value="mp4">MP4</option>
+              <option value="webm-alpha">Transparent WebM</option>
+            </select>
+          </label>
+          <label>
+            <span>Duration</span>
+            <select id="duration">
+              <option value="3">3s</option>
+              <option value="5" selected>5s</option>
+              <option value="7">7s</option>
+              <option value="10">10s</option>
+              <option value="15">15s</option>
+            </select>
+          </label>
+          <label>
+            <span>FPS</span>
+            <select id="fps">
+              <option value="24">24</option>
+              <option value="30" selected>30</option>
+              <option value="60">60</option>
+            </select>
+          </label>
+          <label>
+            <span>Background</span>
+            <input id="backgroundColor" type="color" value="#ffffff">
+          </label>
+        </div>
+        <p class="hint">MP4 does not support transparent background in most browsers. Use Transparent WebM for alpha.</p>
+        <button id="exportBtn" class="primary wide" type="button">Export Video</button>
+        <progress id="exportProgress" max="100" value="0"></progress>
+      </section>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
