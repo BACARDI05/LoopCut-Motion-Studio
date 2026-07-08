@@ -30,6 +30,7 @@
     opacity: $("opacity"),
     opacityValue: $("opacityValue"),
     duration: $("duration"),
+    quality: $("quality"),
     fps: $("fps"),
     exportFormat: $("exportFormat"),
     backgroundColor: $("backgroundColor"),
@@ -54,8 +55,21 @@
     pausedAt: 0,
     diagonal: { vx: 140, vy: 110 },
     drag: null,
-    exporting: false
+    exporting: false,
+    animationFrameId: null,
+    downloadUrl: null
   };
+
+  const QUALITY_PRESETS = {
+    mobile: { maxSide: 720, fps: 15, bitrate: 2500000 },
+    balanced: { maxSide: 1080, fps: 24, bitrate: 6000000 },
+    high: { maxSide: 1440, fps: 30, bitrate: 10000000 }
+  };
+
+  const isMobileDevice = () => (
+    window.matchMedia("(pointer: coarse)").matches ||
+    /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+  );
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const lerp = (a, b, t) => a + (b - a) * t;
@@ -85,6 +99,21 @@
 
   function syncCounter() {
     els.exportCount.textContent = storage.get(exportKey, "0");
+  }
+
+  function stopPreviewLoop() {
+    if (state.animationFrameId !== null) {
+      cancelAnimationFrame(state.animationFrameId);
+      state.animationFrameId = null;
+    }
+  }
+
+  function startPreviewLoop() {
+    stopPreviewLoop();
+    state.animationFrameId = requestAnimationFrame(() => {
+      state.animationFrameId = null;
+      render();
+    });
   }
 
   function applyTheme(theme) {
@@ -250,44 +279,49 @@
     context.restore();
   }
 
-  function drawSelection() {
+  function drawSelection(context = ctx) {
     if (!state.image || state.layer) return;
     const s = state.selection;
-    ctx.save();
-    ctx.lineWidth = Math.max(5, canvas.width / 170);
-    ctx.strokeStyle = "#000000";
-    ctx.shadowColor = "rgba(255,255,255,.92)";
-    ctx.shadowBlur = 5;
-    ctx.setLineDash([14, 8]);
+    context.save();
+    context.lineWidth = Math.max(5, canvas.width / 170);
+    context.strokeStyle = "#000000";
+    context.shadowColor = "rgba(255,255,255,.92)";
+    context.shadowBlur = 5;
+    context.setLineDash([14, 8]);
     if (els.shapeSelect.value === "heart") {
-      drawHeartPath(ctx, s.x, s.y, s.w, s.h);
-      ctx.stroke();
+      drawHeartPath(context, s.x, s.y, s.w, s.h);
+      context.stroke();
     } else if (els.shapeSelect.value === "circle") {
-      ctx.beginPath();
-      ctx.ellipse(s.x + s.w / 2, s.y + s.h / 2, s.w / 2, s.h / 2, 0, 0, Math.PI * 2);
-      ctx.stroke();
+      context.beginPath();
+      context.ellipse(s.x + s.w / 2, s.y + s.h / 2, s.w / 2, s.h / 2, 0, 0, Math.PI * 2);
+      context.stroke();
     } else {
-      ctx.strokeRect(s.x, s.y, s.w, s.h);
+      context.strokeRect(s.x, s.y, s.w, s.h);
     }
-    ctx.setLineDash([]);
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = "#000000";
-    ctx.fillRect(s.x + s.w - 18, s.y + s.h - 18, 18, 18);
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(s.x + s.w - 18, s.y + s.h - 18, 18, 18);
-    ctx.restore();
+    context.setLineDash([]);
+    context.shadowBlur = 0;
+    context.fillStyle = "#000000";
+    context.fillRect(s.x + s.w - 18, s.y + s.h - 18, 18, 18);
+    context.strokeStyle = "#ffffff";
+    context.lineWidth = 2;
+    context.strokeRect(s.x + s.w - 18, s.y + s.h - 18, 18, 18);
+    context.restore();
+  }
+
+  function paintFrame(timeMs, context = ctx, options = {}) {
+    drawImageBase(context, options);
+    drawLayer(timeMs, context);
+    drawSelection(context);
   }
 
   function render(forcedTime, options = {}) {
     const now = forcedTime ?? (state.playing ? performance.now() - state.startedAt : state.pausedAt);
-    drawImageBase(ctx, options);
-    drawLayer(now, ctx);
-    drawSelection();
-    if (state.playing && !state.exporting) requestAnimationFrame(render);
+    paintFrame(now, ctx, options);
+    if (state.playing && !state.exporting) startPreviewLoop();
   }
 
   async function loadImageFile(file) {
+    if (state.exporting) return;
     if (!file) return;
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
       setMessage("Unsupported file type. Use JPG, PNG, or WEBP.", "error");
@@ -324,6 +358,7 @@
   }
 
   function createCutLayer() {
+    if (state.exporting) return;
     if (!state.image) {
       setMessage("No image uploaded.", "error");
       return;
@@ -378,6 +413,7 @@
   }
 
   function onPointerDown(event) {
+    if (state.exporting) return;
     if (!state.image || state.layer) return;
     const pos = pointerPos(event);
     if (!inSelection(pos)) return;
@@ -391,6 +427,7 @@
   }
 
   function onPointerMove(event) {
+    if (state.exporting) return;
     if (!state.drag) return;
     const pos = pointerPos(event);
     const dx = pos.x - state.drag.startX;
@@ -410,6 +447,7 @@
   }
 
   function onPointerUp(event) {
+    if (state.exporting) return;
     if (state.drag) {
       canvas.releasePointerCapture(event.pointerId);
       state.drag = null;
@@ -417,12 +455,15 @@
   }
 
   function resetAnimation() {
+    if (state.exporting) return;
     state.pausedAt = 0;
     state.startedAt = performance.now();
     render(0);
   }
 
   function resetLayer() {
+    if (state.exporting) return;
+    stopPreviewLoop();
     state.layer = null;
     state.playing = false;
     state.pausedAt = 0;
@@ -432,6 +473,7 @@
   }
 
   function togglePlayback() {
+    if (state.exporting) return;
     if (!state.image) {
       setMessage("No image uploaded.", "error");
       return;
@@ -444,8 +486,9 @@
     if (state.playing) {
       state.startedAt = performance.now() - state.pausedAt;
       els.playPauseBtn.textContent = "Pause";
-      requestAnimationFrame(render);
+      startPreviewLoop();
     } else {
+      stopPreviewLoop();
       state.pausedAt = performance.now() - state.startedAt;
       els.playPauseBtn.textContent = "Play";
       render();
@@ -453,26 +496,237 @@
   }
 
   function downloadBlob(blob, extension = "webm") {
+    if (state.downloadUrl) URL.revokeObjectURL(state.downloadUrl);
     const url = URL.createObjectURL(blob);
+    state.downloadUrl = url;
     const a = document.createElement("a");
     a.href = url;
     a.download = `loopcut-export.${extension}`;
     document.body.appendChild(a);
     a.click();
     a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setTimeout(() => {
+      if (state.downloadUrl === url) {
+        URL.revokeObjectURL(url);
+        state.downloadUrl = null;
+      }
+    }, 30000);
+  }
+
+  function getExportSettings() {
+    const preset = QUALITY_PRESETS[els.quality.value] || QUALITY_PRESETS.balanced;
+    const durationSeconds = Math.round(clamp(Number(els.duration.value) || 5, 1, 60));
+    const fps = Math.round(clamp(Number(els.fps.value) || preset.fps, 1, 60));
+    const totalFrames = Math.max(1, durationSeconds * fps);
+    const frameDurationMs = 1000 / fps;
+    const scale = Math.min(1, preset.maxSide / Math.max(canvas.width, canvas.height));
+    return {
+      preset,
+      durationSeconds,
+      fps,
+      totalFrames,
+      frameDurationMs,
+      width: Math.max(2, Math.round(canvas.width * scale)),
+      height: Math.max(2, Math.round(canvas.height * scale))
+    };
+  }
+
+  function setControlsLocked(locked) {
+    [
+      els.imageInput,
+      els.playPauseBtn,
+      els.createLayerBtn,
+      els.resetAnimBtn,
+      els.resetLayerBtn,
+      els.shapeSelect,
+      els.cutWidth,
+      els.cutHeight,
+      els.motionEffect,
+      els.direction,
+      els.speed,
+      els.rotation,
+      els.scale,
+      els.opacity,
+      els.duration,
+      els.quality,
+      els.fps,
+      els.exportFormat,
+      els.backgroundColor
+    ].forEach((el) => {
+      el.disabled = locked;
+    });
+    els.exportBtn.disabled = locked;
+  }
+
+  function waitUntil(targetTime) {
+    const remaining = targetTime - performance.now();
+    if (remaining <= 1) return Promise.resolve();
+    return new Promise((resolve) => setTimeout(resolve, remaining));
+  }
+
+  function waitForRecorderStop(recorder) {
+    return new Promise((resolve, reject) => {
+      recorder.onstop = resolve;
+      recorder.onerror = () => reject(new Error("Recording failed."));
+    });
+  }
+
+  function createExportCanvas(width, height) {
+    const exportCanvas = document.createElement("canvas");
+    exportCanvas.width = width;
+    exportCanvas.height = height;
+    const exportCtx = exportCanvas.getContext("2d", { alpha: true });
+    return { exportCanvas, exportCtx };
+  }
+
+  function renderExportFrame(exportCtx, frameIndex, settings, options) {
+    const scaleX = settings.width / canvas.width;
+    const scaleY = settings.height / canvas.height;
+    exportCtx.setTransform(1, 0, 0, 1, 0, 0);
+    exportCtx.clearRect(0, 0, settings.width, settings.height);
+    exportCtx.setTransform(scaleX, 0, 0, scaleY, 0, 0);
+    paintFrame((frameIndex / settings.fps) * 1000, exportCtx, options);
+    exportCtx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  function readEbmlId(bytes, offset) {
+    const first = bytes[offset];
+    if (first === undefined) return null;
+    let length = 1;
+    let marker = 0x80;
+    while (length <= 4 && !(first & marker)) {
+      marker >>= 1;
+      length += 1;
+    }
+    if (length > 4 || offset + length > bytes.length) return null;
+    let value = 0;
+    for (let i = 0; i < length; i += 1) value = (value << 8) | bytes[offset + i];
+    return { value, length };
+  }
+
+  function readEbmlSize(bytes, offset) {
+    const first = bytes[offset];
+    if (first === undefined) return null;
+    let length = 1;
+    let marker = 0x80;
+    while (length <= 8 && !(first & marker)) {
+      marker >>= 1;
+      length += 1;
+    }
+    if (length > 8 || offset + length > bytes.length) return null;
+    let value = first & (marker - 1);
+    let unknown = value === marker - 1;
+    for (let i = 1; i < length; i += 1) {
+      value = (value * 256) + bytes[offset + i];
+      unknown = unknown && bytes[offset + i] === 0xff;
+    }
+    return { value, length, unknown };
+  }
+
+  function encodeEbmlSize(value, length) {
+    const max = Math.pow(2, (7 * length)) - 2;
+    if (value > max) return null;
+    const encoded = new Uint8Array(length);
+    let remaining = value;
+    for (let i = length - 1; i >= 0; i -= 1) {
+      encoded[i] = remaining & 0xff;
+      remaining = Math.floor(remaining / 256);
+    }
+    encoded[0] |= 1 << (8 - length);
+    return encoded;
+  }
+
+  function findEbmlElement(bytes, start, end, targetId) {
+    let offset = start;
+    while (offset < end) {
+      const id = readEbmlId(bytes, offset);
+      if (!id) return null;
+      const size = readEbmlSize(bytes, offset + id.length);
+      if (!size) return null;
+      const headerStart = offset;
+      const dataStart = offset + id.length + size.length;
+      const dataEnd = size.unknown ? end : dataStart + size.value;
+      if (dataEnd > bytes.length) return null;
+      const element = { headerStart, dataStart, dataEnd, idLength: id.length, sizeLength: size.length, size };
+      if (id.value === targetId) return element;
+      offset = dataEnd;
+    }
+    return null;
+  }
+
+  function readUnsignedEbml(bytes, start, end) {
+    let value = 0;
+    for (let i = start; i < end; i += 1) value = (value * 256) + bytes[i];
+    return value;
+  }
+
+  function concatBytes(parts) {
+    const total = parts.reduce((sum, part) => sum + part.length, 0);
+    const output = new Uint8Array(total);
+    let offset = 0;
+    parts.forEach((part) => {
+      output.set(part, offset);
+      offset += part.length;
+    });
+    return output;
+  }
+
+  async function fixWebmDuration(blob, durationSeconds) {
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const segment = findEbmlElement(bytes, 0, bytes.length, 0x18538067);
+    if (!segment) return blob;
+    const info = findEbmlElement(bytes, segment.dataStart, segment.dataEnd, 0x1549a966);
+    if (!info) return blob;
+    const timecodeScale = findEbmlElement(bytes, info.dataStart, info.dataEnd, 0x2ad7b1);
+    const scale = timecodeScale ? readUnsignedEbml(bytes, timecodeScale.dataStart, timecodeScale.dataEnd) : 1000000;
+    const durationValue = durationSeconds * 1000000000 / scale;
+    const durationPayload = new Uint8Array(8);
+    new DataView(durationPayload.buffer).setFloat64(0, durationValue, false);
+    const durationElement = concatBytes([new Uint8Array([0x44, 0x89, 0x88]), durationPayload]);
+    const existingDuration = findEbmlElement(bytes, info.dataStart, info.dataEnd, 0x4489);
+
+    if (existingDuration) {
+      const payloadLength = existingDuration.dataEnd - existingDuration.dataStart;
+      const nextBytes = new Uint8Array(bytes);
+      if (payloadLength === 4) {
+        new DataView(nextBytes.buffer).setFloat32(existingDuration.dataStart, durationValue, false);
+      } else if (payloadLength === 8) {
+        new DataView(nextBytes.buffer).setFloat64(existingDuration.dataStart, durationValue, false);
+      } else {
+        return blob;
+      }
+      return new Blob([nextBytes], { type: blob.type });
+    }
+
+    const nextInfoSize = info.size.value + durationElement.length;
+    const encodedInfoSize = encodeEbmlSize(nextInfoSize, info.sizeLength);
+    if (!encodedInfoSize || info.size.unknown) return blob;
+
+    const head = bytes.slice(0, info.headerStart + info.idLength);
+    const infoBodyStart = bytes.slice(info.dataStart, info.dataEnd);
+    const tail = bytes.slice(info.dataEnd);
+    const nextBytes = concatBytes([head, encodedInfoSize, durationElement, infoBodyStart, tail]);
+
+    if (!segment.size.unknown) {
+      const nextSegmentSize = segment.size.value + durationElement.length;
+      const encodedSegmentSize = encodeEbmlSize(nextSegmentSize, segment.sizeLength);
+      if (!encodedSegmentSize) return blob;
+      nextBytes.set(encodedSegmentSize, segment.headerStart + segment.idLength);
+    }
+    return new Blob([nextBytes], { type: blob.type });
   }
 
   async function exportVideo() {
+    if (state.exporting) return setMessage("An export is already running.", "error");
     if (!state.image) return setMessage("No image uploaded.", "error");
     if (!state.layer) return setMessage("No selection created. Create a cut layer first.", "error");
     if (!canvas.captureStream || !window.MediaRecorder) {
       return setMessage("Browser does not support MediaRecorder export.", "error");
     }
-    const fps = Number(els.fps.value);
-    const durationMs = Number(els.duration.value) * 1000;
-    const totalFrames = Math.round((durationMs / 1000) * fps);
-    const frameDelay = 1000 / fps;
+    const settings = getExportSettings();
+    if (isMobileDevice() && els.quality.value === "high" && !window.confirm("High Quality export can be slow on mobile devices. Continue?")) {
+      return;
+    }
     const requestedFormat = els.exportFormat.value;
     const transparentCut = requestedFormat === "webm-alpha";
     const forceBackground = requestedFormat === "mp4";
@@ -497,43 +751,50 @@
       setMessage("Transparent WebM preserves canvas alpha when supported by this browser.", "ok");
     }
     const chunks = [];
+    const wasPlaying = state.playing;
+    const resumeAt = state.playing ? performance.now() - state.startedAt : state.pausedAt;
     state.exporting = true;
     state.playing = false;
-    els.exportBtn.disabled = true;
+    stopPreviewLoop();
+    setControlsLocked(true);
     els.exportBtn.textContent = "Exporting...";
     els.exportProgress.value = 0;
-    setMessage("Preparing export...", "ok");
+    setMessage(`Preparing ${settings.durationSeconds}s export at ${settings.fps} FPS...`, "ok");
 
+    let stream = null;
+    let exportCanvas = null;
+    let exportCtx = null;
     try {
-      const stream = canvas.captureStream(0);
-      const videoTrack = stream.getVideoTracks()[0];
-      if (!videoTrack || typeof videoTrack.requestFrame !== "function") {
-        stream.getTracks().forEach((track) => track.stop());
-        throw new Error("This browser cannot export exact-frame canvas video.");
-      }
-      const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 7000000 });
+      const created = createExportCanvas(settings.width, settings.height);
+      exportCanvas = created.exportCanvas;
+      exportCtx = created.exportCtx;
+      stream = exportCanvas.captureStream(settings.fps);
+      const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: settings.preset.bitrate });
       recorder.ondataavailable = (event) => {
         if (event.data && event.data.size) chunks.push(event.data);
       };
-      const done = new Promise((resolve, reject) => {
-        recorder.onstop = resolve;
-        recorder.onerror = () => reject(new Error("Recording failed."));
-      });
-      recorder.start(100);
-      setMessage("Recording export...", "ok");
-      for (let frame = 0; frame < totalFrames; frame += 1) {
-        render(frame * frameDelay, { forceBackground, backgroundColor, transparentCut });
-        if (videoTrack && typeof videoTrack.requestFrame === "function") videoTrack.requestFrame();
-        els.exportProgress.value = Math.round(((frame + 1) / totalFrames) * 100);
-        await new Promise((resolve) => setTimeout(resolve, frameDelay));
+      const done = waitForRecorderStop(recorder);
+      recorder.start();
+
+      const startedAt = performance.now();
+      setMessage(`Rendering 0 / ${settings.totalFrames} frames...`, "ok");
+      for (let frame = 0; frame <= settings.totalFrames; frame += 1) {
+        await waitUntil(startedAt + frame * settings.frameDurationMs);
+        renderExportFrame(exportCtx, frame, settings, { forceBackground, backgroundColor, transparentCut });
+        const completedFrames = Math.min(frame + 1, settings.totalFrames);
+        els.exportProgress.value = Math.round((completedFrames / settings.totalFrames) * 100);
+        if (frame % Math.max(1, Math.round(settings.fps / 2)) === 0 || frame >= settings.totalFrames) {
+          setMessage(`Rendering ${completedFrames} / ${settings.totalFrames} frames...`, "ok");
+        }
       }
+      await waitUntil(startedAt + (settings.durationSeconds * 1000) + settings.frameDurationMs);
       setMessage("Finalizing export...", "ok");
       recorder.stop();
       await done;
-      stream.getTracks().forEach((track) => track.stop());
-      const blob = new Blob(chunks, { type: "video/webm" });
+      const blob = new Blob(chunks, { type: mime.split(";")[0] });
       if (!blob.size) throw new Error("Export failed.");
-      downloadBlob(blob, extension);
+      const finalBlob = extension === "webm" ? await fixWebmDuration(blob, settings.durationSeconds) : blob;
+      downloadBlob(finalBlob, extension);
       const nextCount = Number(storage.get(exportKey, "0")) + 1;
       storage.set(exportKey, String(nextCount));
       syncCounter();
@@ -541,11 +802,25 @@
     } catch (error) {
       setMessage(error.message || "Export failed.", "error");
     } finally {
+      if (stream) stream.getTracks().forEach((track) => track.stop());
+      if (exportCtx && exportCanvas) exportCtx.clearRect(0, 0, exportCanvas.width, exportCanvas.height);
+      exportCtx = null;
+      exportCanvas = null;
       state.exporting = false;
-      els.exportBtn.disabled = false;
+      setControlsLocked(false);
       els.exportBtn.textContent = "Export Video";
       els.exportProgress.value = 0;
-      render(state.pausedAt);
+      state.pausedAt = resumeAt;
+      if (wasPlaying) {
+        state.playing = true;
+        state.startedAt = performance.now() - resumeAt;
+        els.playPauseBtn.textContent = "Pause";
+        startPreviewLoop();
+      } else {
+        state.playing = false;
+        els.playPauseBtn.textContent = "Play";
+        render(state.pausedAt);
+      }
     }
   }
 
@@ -573,6 +848,17 @@
     els.resetAnimBtn.addEventListener("click", resetAnimation);
     els.resetLayerBtn.addEventListener("click", resetLayer);
     els.exportBtn.addEventListener("click", exportVideo);
+    els.quality.addEventListener("change", () => {
+      const preset = QUALITY_PRESETS[els.quality.value] || QUALITY_PRESETS.balanced;
+      els.fps.value = String(preset.fps);
+      setMessage(`${els.quality.selectedOptions[0].textContent} export set to ${preset.fps} FPS.`, "ok");
+    });
+    els.fps.addEventListener("change", () => {
+      const preset = QUALITY_PRESETS[els.quality.value] || QUALITY_PRESETS.balanced;
+      if (Number(els.fps.value) > preset.fps && els.quality.value === "mobile") {
+        setMessage("Mobile Safe works best at 12-15 FPS.", "ok");
+      }
+    });
     els.themeToggle.addEventListener("click", () => {
       applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
     });
@@ -602,6 +888,10 @@
 
   bind();
   applyTheme(storage.get(themeKey, "light"));
+  if (isMobileDevice()) {
+    els.quality.value = "mobile";
+    els.fps.value = String(QUALITY_PRESETS.mobile.fps);
+  }
   syncCounter();
   updateControlLabels();
   render(0);

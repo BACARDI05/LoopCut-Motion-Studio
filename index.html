@@ -19,6 +19,7 @@
         <p class="subtitle">Cut any part of an image, animate it, export it.</p>
       </div>
       <div class="hero-side">
+        <a class="support-link primary" href="https://github.com/sponsors/Bacardi05" target="_blank" rel="noopener noreferrer">Support / Donate</a>
         <button id="themeToggle" class="theme-toggle" type="button" aria-pressed="false">Dark Mode</button>
         <div class="counter" aria-live="polite">
           <span>Successful Videos Exported</span>
@@ -166,11 +167,20 @@
             </select>
           </label>
           <label>
+            <span>Quality</span>
+            <select id="quality">
+              <option value="mobile">Mobile Safe</option>
+              <option value="balanced" selected>Balanced</option>
+              <option value="high">High Quality</option>
+            </select>
+          </label>
+          <label>
             <span>FPS</span>
             <select id="fps">
+              <option value="12">12</option>
+              <option value="15">15</option>
               <option value="24">24</option>
               <option value="30" selected>30</option>
-              <option value="60">60</option>
             </select>
           </label>
           <label>
@@ -183,6 +193,9 @@
         <progress id="exportProgress" max="100" value="0"></progress>
       </section>
     </section>
+    <footer class="site-footer">
+      Copyright &copy; Bacardi05. All rights reserved.
+    </footer>
   </main>
 
   <script src="app.js"></script>

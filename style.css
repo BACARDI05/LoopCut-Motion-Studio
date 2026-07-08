@@ -44,6 +44,7 @@ body {
 }
 
 button, input, select { font: inherit; }
+a { color: inherit; }
 
 .shell {
   width: min(1440px, calc(100% - 28px));
@@ -96,7 +97,7 @@ h2 {
   font-weight: 800;
 }
 
-.counter, .notice, .card, button, select, .drop-zone, input[type="color"] {
+.counter, .notice, .card, button, select, .drop-zone, input[type="color"], .support-link {
   background: var(--panel);
   box-shadow: 10px 10px 24px var(--shadow-lo), -10px -10px 24px var(--shadow-hi);
 }
@@ -306,7 +307,7 @@ input[type="range"] {
   accent-color: var(--brand);
 }
 
-button {
+button, .support-link {
   min-height: 46px;
   border: 0;
   border-radius: 16px;
@@ -316,11 +317,11 @@ button {
   transition: transform .18s, box-shadow .18s, background .18s;
 }
 
-button:hover {
+button:hover, .support-link:hover {
   transform: translateY(-1px);
 }
 
-button:active {
+button:active, .support-link:active {
   transform: translateY(0);
   box-shadow: inset 6px 6px 13px var(--inset-lo), inset -6px -6px 13px var(--inset-hi);
 }
@@ -339,6 +340,12 @@ button:disabled {
 
 .wide { width: 100%; margin-top: 14px; }
 
+.support-link {
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+}
+
 .values {
   color: var(--muted);
   font-size: .82rem;
@@ -352,7 +359,7 @@ button:disabled {
 }
 
 .export-row {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 progress {
@@ -360,6 +367,14 @@ progress {
   height: 12px;
   margin-top: 12px;
   accent-color: var(--brand);
+}
+
+.site-footer {
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: .86rem;
+  font-weight: 700;
+  text-align: center;
 }
 
 @media (max-width: 1080px) {
